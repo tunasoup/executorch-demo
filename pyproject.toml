@@ -1,0 +1,104 @@
+[project]
+name = "executorch-demo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.12.*"
+dependencies = [
+    "executorch>=0.7.0",
+    "torchvision>=0.23.0",
+]
+
+[project.scripts]
+executorch-demo = "executorch_demo:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 99
+indent-width = 4
+
+[tool.ruff.lint]
+select = [
+    "AIR",  # Airflow
+    "FAST",  # FastAPI
+    "YTT",  #flake8-2020
+    "ANN",  # flake8-annotations
+    "ASYNC", # flake8-async
+    "S",  # flake8-bugbear
+    "B",  # flake8-bugbear
+    "A",  # flake8-builtins
+    "C4", # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "DJ",  # flake8-django
+    "EM",  # flake8-errmsg
+    "EXE",  # flake8-executable
+    "INT",  # flake8-gettext
+    "ISC",  # flake8-implicit-str-concat
+    "ICN",  # flake8-import-conventions
+    "LOG",  # flake8-logging
+    "G",  # flake8-logging-format
+    "INP",  # flake8-no-pep420
+    "PIE",  # flake8-pie
+    #"T20",  # flake8-print
+    "PYI",  # flake8-pyi
+    "PT",  # flake8-pytest-style
+    "RET",  # flake8-return
+    "SLF",  # flake8-self
+    "SIM",  # flake8-simplify
+    "SLOT",  # flake8-slots
+    "TID",  # flake8-tidy-imports
+    "ARG",  # flake8-unused-arguments
+    "PTH",  # flake8-use-pathlib
+    "FLY",  # flynt
+    "C90",  # mccabe
+    "NPY",  # NumPy-specific-rules
+    "PD",  # pandas-vet
+    "N",  # pep8-naming
+    "PERF",  # Perflint
+    "E",  # pycodestyle-error
+    "W",  # pycodestyle-warning
+    "DOC",  # pydoclint
+    "F",  # Pyflakes
+    "PGH",  # pygrep-hooks
+    "PL",  # Pylint
+    "UP",  # pyupgrade
+    "FURB",  # refurb
+    "RUF",  # Ruff-specific rules
+    "TRY",  # tryceratops
+]
+
+ignore = [
+    "ANN003",  # missing-type-kwargs
+    "ANN401",  # any-type
+    "SIM105",  # suppressible-expression,
+    "E111",  # indentation-with-invalid-multiple
+    "E114",  # indentation-with-invalid-multiple-comment
+    "E117",  # over-indented
+    "D206",  # docstring-tab-indentation
+    "D300",  # triple-single-quotes
+    "W191",  # tab-indentation
+    "TID253",  # banned-module-level-imports
+    "S101",  # assert
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+# Ban certain modules from being imported at module level, instead requiring
+# that they're imported lazily (e.g., within a function definition) if TID253 is enabled.
+banned-module-level-imports = ["torch", "tensorflow"]
+
+[tool.ruff.format]
+quote-style = "double"  # "preserve"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
