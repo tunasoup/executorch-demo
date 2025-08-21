@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-executorch-demo = "executorch_demo:main"
+mobilenet-demo = "executorch_demo.mobilenet_demo:run_mobilenet_demo"
 
 [build-system]
 requires = ["uv_build>=0.8.4,<0.9.0"]
