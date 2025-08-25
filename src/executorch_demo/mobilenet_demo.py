@@ -10,7 +10,7 @@ from torchvision.models.mobilenetv2 import MobileNet_V2_Weights
 
 
 def run_mobilenet_demo() -> None:
-    # Run demo from https://github.com/meta-pytorch/executorch-examples/tree/main/dl3/android/DeepLabV3Demo
+    # Run demo from https://colab.research.google.com/drive/1qpxrXC3YdJQzly3mRg-4ayYiOjC6rue3?usp=sharing
     print(version.__version__)
     print(torch.__version__)
 
