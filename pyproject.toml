@@ -5,8 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
-    "executorch>=0.7.0",
-    "torchvision>=0.23.0",
+    "executorch>=0.7.0",  # PyTorch Edge
+    "matplotlib>=3.10.5",  # Visualizations
+    "pyqt6>=6.9.1",  # Visualization backend
+    "torchvision>=0.23.0",  # CV functions and pretrained models
 ]
 
 [project.scripts]
