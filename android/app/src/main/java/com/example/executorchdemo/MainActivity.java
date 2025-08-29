@@ -5,6 +5,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -134,41 +137,90 @@ public class MainActivity extends AppCompatActivity {
 
     private void runSegmentation() {
         try {
-            long startTime = System.nanoTime();
 
             Module module = Module.load(selectedModelFile.getAbsolutePath());
 
-            Bitmap resizedBitmap = Bitmap.createScaledBitmap(inputBitmap, 224, 224, true);
-            FloatBuffer inputBuffer = Tensor.allocateFloatBuffer(3 * 224 * 224);
+            int width = 224;
+            int height = 224;
+
+            Bitmap resizedBitmap = Bitmap.createScaledBitmap(inputBitmap, width, height, true);
+            FloatBuffer inputBuffer = Tensor.allocateFloatBuffer(3 * width * height);
 
             Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(resizedBitmap,
                     TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
                     TensorImageUtils.TORCHVISION_NORM_STD_RGB);
 
+            final long timeOne = System.nanoTime();
             Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
-            float[] outputArray = outputTensor.getDataAsFloatArray();
+            final long timeTwo = System.nanoTime();
 
-            // For demo: use outputArray as grayscale mask and render
-            Bitmap outputBitmap = Bitmap.createBitmap(224, 224, Bitmap.Config.ARGB_8888);
-            for (int y = 0; y < 224; y++) {
-                for (int x = 0; x < 224; x++) {
-                    int index = y * 224 + x;
-                    int intensity = (int) (outputArray[index] * 255);
-                    int pixel = 0xFF000000 | (intensity << 16) | (intensity << 8) | intensity;
-                    outputBitmap.setPixel(x, y, pixel);
+            final long nClasses = outputTensor.shape()[1];
+            List<Integer> colors = generateDistinctColors(nClasses);
+            final float[] scores = outputTensor.getDataAsFloatArray();
+
+            int[] intValues = new int[width * height];
+            for (int j = 0; j < height; j++) {
+                for (int k = 0; k < width; k++) {
+                    int maxi = 0, maxj = 0, maxk = 0;
+                    double maxnum = -Double.MAX_VALUE;
+                    for (int i = 0; i < nClasses; i++) {
+                        float score = scores[i * (width * height) + j * width + k];
+                        if (score > maxnum) {
+                            maxnum = score;
+                            maxi = i;
+                            maxj = j;
+                            maxk = k;
+                        }
+                    }
+                    if (maxi == 0) intValues[maxj * width + maxk] = resizedBitmap.getPixel(k, j);
+                    else intValues[maxj * width + maxk] = colors.get(maxi);
                 }
             }
+            final long timeThree = System.nanoTime();
+            double inferenceTimeMs = (timeTwo - timeOne) / 1_000_000.0;
+            double arrayTimeMs = (timeThree - timeTwo) / 1_000_000.0;
 
-            long endTime = System.nanoTime();
-            double inferenceTimeMs = (endTime - startTime) / 1_000_000.0;
+            Bitmap overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            overlayBitmap.setPixels(intValues, 0, width, 0, 0, width, height);
 
-            outputImageView.setImageBitmap(outputBitmap);
+            Bitmap outputBitmap = overlayWithAlpha(resizedBitmap, overlayBitmap, 0.5f);
+            Bitmap finalBitmap = Bitmap.createScaledBitmap(outputBitmap, inputBitmap.getWidth(),
+                    inputBitmap.getHeight(), true);
+
+            outputImageView.setImageBitmap(finalBitmap);
             inferenceTimeText.setText("Inference Time: " + String.format("%.2f", inferenceTimeMs) + " ms");
+            Log.d("ImageSegmentation", "inference time (ms): " + inferenceTimeMs);
+            Log.d("ImageSegmentation", "array time (ms): " + arrayTimeMs);
 
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Inference failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private List<Integer> generateDistinctColors(long count) {
+        List<Integer> colors = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            float hue = (i * 360f / count) % 360f;
+            float[] hsv = new float[]{hue, 0.7f, 1.0f};
+            colors.add(Color.HSVToColor(hsv));
+        }
+        return colors;
+    }
+
+    private Bitmap overlayWithAlpha(Bitmap base, Bitmap overlay, float alpha) {
+        if (base.getWidth() != overlay.getWidth() || base.getHeight() != overlay.getHeight()) {
+            throw new IllegalArgumentException("Bitmaps must be the same size");
+        }
+
+        Bitmap result = base.copy(base.getConfig(), true);
+        Canvas canvas = new Canvas(result);
+
+        Paint paint = new Paint();
+        paint.setAlpha((int) (alpha * 255));
+        canvas.drawBitmap(overlay, 0, 0, paint);
+
+        return result;
     }
 
     private void requestPermissionsIfNeeded() {
