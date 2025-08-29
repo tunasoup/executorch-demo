@@ -1,5 +1,7 @@
 import logging
 import logging.handlers
+from collections.abc import Generator
+from itertools import chain
 from pathlib import Path
 
 
@@ -86,3 +88,30 @@ def get_model_dir() -> Path:
         Path: Path to the model directory
     """
     return get_root_dir() / "models"
+
+
+def get_files_with_extensions(
+    path: Path, extensions: set, *, recursive: bool = False, case_sensitive: bool | None = None
+) -> Generator[Path, None, None]:
+    """Get files with specific extensions in a directory.
+
+    Args:
+        path (Path): Path to the directory to search in.
+        extensions (set): Set of file extensions to look for, without leading dot.
+        recursive (bool, optional): Whether to search recursively. Defaults to False.
+        case_sensitive (bool | None, optional): Whether the extension matching is case sensitive.
+            If None, use operating system default. Defaults to None.
+
+    Raises:
+        ValueError: If the provided path is not a directory.
+
+    Yields:
+        Generator[Path, None, None]: Generator of file paths matching the extensions.
+    """
+    if not path.is_dir():
+        msg = f"The provided path {path} is not a directory."
+        raise ValueError(msg)
+
+    globber = path.rglob if recursive else path.glob
+    generators = (globber(f"*.{ext}", case_sensitive=case_sensitive) for ext in extensions)
+    return chain.from_iterable(generators)

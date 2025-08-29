@@ -6,16 +6,22 @@ from torchvision.io import decode_image
 from torchvision.models.segmentation import FCN_ResNet50_Weights, fcn_resnet50
 from torchvision.utils import draw_segmentation_masks
 
-from executorch_demo.utils import create_logger, get_data_raw_dir
+from executorch_demo.utils import create_logger, get_data_raw_dir, get_files_with_extensions
 
 logger = create_logger(__name__)
 
 
 def plot_images(imgs: torch.Tensor | list[torch.Tensor]) -> None:
+    """Plot a list of tensor images in a grid.
+
+    Args:
+        imgs (torch.Tensor | list[torch.Tensor]): 4D Tensor or a list of 3D Tensors.
+    """
     if isinstance(imgs, torch.Tensor) and imgs.dim() == 4:
         imgs = [imgs[i] for i in range(imgs.size(0))]
     elif not isinstance(imgs, list):
         imgs = [imgs]
+
     n_imgs = len(imgs)
     n_rows, n_cols = optimal_grid(n_imgs, target_ratio=16 / 9)
     fig, axes = plt.subplots(n_rows, n_cols)
@@ -24,39 +30,51 @@ def plot_images(imgs: torch.Tensor | list[torch.Tensor]) -> None:
         img_to_plot = img.detach().cpu().permute(1, 2, 0)
         axes[i].imshow(img_to_plot)
         axes[i].axis("off")
+
     plt.tight_layout()
     plt.show()
 
 
 def optimal_grid(count: int, target_ratio: float = 16 / 9) -> tuple[int, int]:
+    """Get the optimal grid size (rows, cols) for subplotting images.
+
+    Args:
+        count (int): Number of images.
+        target_ratio (float, optional): Target aspect ratio.
+
+    Returns:
+        tuple[int, int]: Number of rows and columns.
+    """
     return min(
         ((r, math.ceil(count / r)) for r in range(1, count + 1)),
         key=lambda rc: abs((rc[1] / rc[0]) - target_ratio),
     )
 
 
-def main() -> None:
+def run_inference() -> None:
+    """Run segmentation inference with a hardcoded model and images."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Starting inference on device %s", device)
-    data_path = get_data_raw_dir() / "misc"
-    input_img_paths = data_path.glob("*.jpg")
-    input_imgs = [decode_image(d) for d in input_img_paths]
 
+    data_path = get_data_raw_dir() / "misc"
+    input_img_paths = get_files_with_extensions(data_path, {"jpg", "jpeg"}, recursive=False)
+    input_imgs = [decode_image(d) for d in input_img_paths]
+    logger.info("Loaded %d images for inference", len(input_imgs))
     # plot_images(input_imgs)
 
     weights = FCN_ResNet50_Weights.DEFAULT
-    # preprocess = weights.transforms(resize_size=None)
     preprocess = weights.transforms()
     classes = weights.meta["categories"]
     n_classes = len(classes)
 
     model = fcn_resnet50(weights=weights, progress=False)
     model = model.eval().to(device)
+    logger.info("Model loaded with %d classes", n_classes)
 
     batch = torch.stack([preprocess(d).to(device) for d in input_imgs])
     output = model(batch)["out"]  # (n_imgs, n_classes, h, w)
 
-    # Given the output , get the predicted class for each pixel (n_imgs, h, w)
+    # Given the output, get the predicted class for each pixel (n_imgs, h, w)
     predictions = output.argmax(1)
 
     # Create a mask for each class (n_imgs, n_classes, h, w)
@@ -92,9 +110,10 @@ def main() -> None:
         for img, seg_img in zip(resized_imgs, segmented_imgs, strict=True)
     ]
 
+    logger.info("Inference done, plotting images...")
     plot_images(stacked_imgs)
     # plot_images(input_imgs + segmented_imgs)
 
 
 if __name__ == "__main__":
-    main()
+    run_inference()
