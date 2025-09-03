@@ -1,8 +1,6 @@
 package com.example.executorchdemo;
 
-import android.Manifest;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -24,7 +22,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 
 import org.pytorch.executorch.EValue;
 import org.pytorch.executorch.Module;
@@ -35,8 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-
-    private static final int REQUEST_PERMISSIONS = 1;
 
     private Spinner modelSpinner;
     private TextView modelMemoryView, inferenceTimeView, postprocessingTimeView;
@@ -66,7 +61,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        requestPermissionsIfNeeded();
 
         modelSpinner = findViewById(R.id.modelSpinner);
         modelMemoryView = findViewById(R.id.modelMemoryText);
@@ -113,6 +107,13 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Set a TextView's parameter section to the given text.
+     *
+     * @param resId string resource id with a single parameter string format
+     * @param textView TextView UI element
+     * @param text string as the resource's argument
+     */
     private void setViewText(
             @StringRes final int resId, final TextView textView,
             final String text
@@ -120,6 +121,9 @@ public class MainActivity extends AppCompatActivity {
         textView.setText(getString(resId, text));
     }
 
+    /**
+     * Load the inference models from the model directory, and place them on the spinner.
+     */
     private void loadModelList() {
         final File modelDir = new File(getExternalFilesDir(null), "models");
         if (!modelDir.exists()) {
@@ -157,10 +161,14 @@ public class MainActivity extends AppCompatActivity {
         imagePickerLauncher.launch(pickIntent);
     }
 
+    /**
+     * Run segmentation inference with the set model and image.
+     */
     private void runSegmentation() {
         try {
             final Module module = Module.load(selectedModelFile.getAbsolutePath());
 
+            // Current test model expects a specific image size and preprocessing
             final int width = 224;
             final int height = 224;
 
@@ -173,50 +181,26 @@ public class MainActivity extends AppCompatActivity {
 
             final long timeOne = System.nanoTime();
             final Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
+
             final long timeTwo = System.nanoTime();
-
-            final long nClasses = outputTensor.shape()[1];
-            final List<Integer> colors = generateDistinctColors(nClasses);
-            final float[] scores = outputTensor.getDataAsFloatArray();
-
-            final int[] intValues = new int[width * height];
-            for (int j = 0; j < height; j++) {
-                for (int k = 0; k < width; k++) {
-                    int maxi = 0, maxj = 0, maxk = 0;
-                    double maxnum = -Double.MAX_VALUE;
-                    for (int i = 0; i < nClasses; i++) {
-                        final float score = scores[i * (width * height) + j * width + k];
-                        if (score > maxnum) {
-                            maxnum = score;
-                            maxi = i;
-                            maxj = j;
-                            maxk = k;
-                        }
-                    }
-                    if (maxi == 0) intValues[maxj * width + maxk] = resizedBitmap.getPixel(k, j);
-                    else intValues[maxj * width + maxk] = colors.get(maxi);
-                }
-            }
-            final long timeThree = System.nanoTime();
-            final double inferenceTimeMs = (timeTwo - timeOne) / 1_000_000.0;
-            final double arrayTimeMs = (timeThree - timeTwo) / 1_000_000.0;
-
-            final Bitmap overlayBitmap =
-                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            overlayBitmap.setPixels(intValues, 0, width, 0, 0, width, height);
+            final Bitmap overlayBitmap = postprocess(outputTensor, resizedBitmap);
 
             final Bitmap outputBitmap = overlayWithAlpha(resizedBitmap, overlayBitmap, 0.5f);
             final Bitmap finalBitmap =
                     Bitmap.createScaledBitmap(outputBitmap, inputBitmap.getWidth(),
                                               inputBitmap.getHeight(), true);
 
+            final long timeThree = System.nanoTime();
+            final double inferenceTimeMs = (timeTwo - timeOne) / 1_000_000.0;
+            final double postprocessTimeMs = (timeThree - timeTwo) / 1_000_000.0;
+
             outputImageView.setImageBitmap(finalBitmap);
             final String inferenceTime = String.format("%.2f", inferenceTimeMs) + " ms";
-            final String arrayTime = String.format("%.2f", arrayTimeMs) + " ms";
+            final String arrayTime = String.format("%.2f", postprocessTimeMs) + " ms";
             setViewText(R.string.inference_time, inferenceTimeView, inferenceTime);
             setViewText(R.string.postprocessing_time, postprocessingTimeView, arrayTime);
             Log.d("ImageSegmentation", "inference time (ms): " + inferenceTimeMs);
-            Log.d("ImageSegmentation", "array time (ms): " + arrayTimeMs);
+            Log.d("ImageSegmentation", "array time (ms): " + postprocessTimeMs);
 
         } catch (final Exception e) {
             e.printStackTrace();
@@ -224,11 +208,59 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Convert the model output into a readable segmentation image.
+     *
+     * @param outputTensor inference output of shape (images, classes, height, width).
+     * @param resizedBitmap input image resized to match the model output.
+     * @return inference segmentation map with a distinct color for each found class.
+     */
+    private Bitmap postprocess(final Tensor outputTensor, final Bitmap resizedBitmap) {
+        // Deduce class number from the output shape
+        final long nClasses = outputTensor.shape()[1];
+        final List<Integer> colors = generateDistinctColors(nClasses);
+
+        final int width = resizedBitmap.getWidth();
+        final int height = resizedBitmap.getHeight();
+
+        // For each pixel, output the class (color) with the highest class score
+        final float[] scores = outputTensor.getDataAsFloatArray();
+        final int[] intValues = new int[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int bestClassIdx = 0;
+                double bestScore = -Double.MAX_VALUE;
+                for (int c = 0; c < nClasses; c++) {
+                    // Get the corresponding pixel on the flattened array
+                    final float score = scores[c * (width * height) + y * width + x];
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestClassIdx = c;
+                    }
+                }
+                // Keep the original pixel color for background class (index 0)
+                if (bestClassIdx == 0) intValues[y * width + x] = resizedBitmap.getPixel(x, y);
+                else intValues[y * width + x] = colors.get(bestClassIdx);
+            }
+        }
+        final Bitmap segmentationMap =
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        segmentationMap.setPixels(intValues, 0, width, 0, 0, width, height);
+        return segmentationMap;
+    }
+
     private void resetInferenceTimes() {
         setViewText(R.string.inference_time, inferenceTimeView, "-");
         setViewText(R.string.postprocessing_time, postprocessingTimeView, "-");
     }
 
+    /**
+     * Generate colors with different hues. Meant to be used for differentiating different classes
+     * in segmented images.
+     *
+     * @param count number of colors to generate.
+     * @return list of distinct colors.
+     */
     private List<Integer> generateDistinctColors(final long count) {
         final List<Integer> colors = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -239,6 +271,14 @@ public class MainActivity extends AppCompatActivity {
         return colors;
     }
 
+    /**
+     * Overlay an image on top of another one with a given alpha value.
+     *
+     * @param base bottom layer image with full opacity.
+     * @param overlay image to add on top of the base image.
+     * @param alpha opacity of the overlay image between 0 and 1.
+     * @return combined image with the overlay image on top of the base image.
+     */
     private Bitmap overlayWithAlpha(final Bitmap base, final Bitmap overlay, final float alpha) {
         if (base.getWidth() != overlay.getWidth() || base.getHeight() != overlay.getHeight()) {
             throw new IllegalArgumentException("Bitmaps must be the same size");
@@ -252,15 +292,6 @@ public class MainActivity extends AppCompatActivity {
         canvas.drawBitmap(overlay, 0, 0, paint);
 
         return result;
-    }
-
-    private void requestPermissionsIfNeeded() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(
-                    this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                    REQUEST_PERMISSIONS);
-        }
     }
 
 }
