@@ -22,6 +22,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
@@ -38,9 +39,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_PERMISSIONS = 1;
 
     private Spinner modelSpinner;
-    private TextView modelMemoryText, inferenceTimeText;
+    private TextView modelMemoryView, inferenceTimeView, postprocessingTimeView;
     private ImageView inputImageView, outputImageView;
-    private Button selectImageButton, runInferenceButton;
 
     private File selectedModelFile;
     private Bitmap inputBitmap;
@@ -69,15 +69,17 @@ public class MainActivity extends AppCompatActivity {
         requestPermissionsIfNeeded();
 
         modelSpinner = findViewById(R.id.modelSpinner);
-        modelMemoryText = findViewById(R.id.modelMemoryText);
-        inferenceTimeText = findViewById(R.id.inferenceTimeText);
+        modelMemoryView = findViewById(R.id.modelMemoryText);
+        inferenceTimeView = findViewById(R.id.inferenceTimeText);
+        postprocessingTimeView = findViewById(R.id.postprocessingTimeText);
         inputImageView = findViewById(R.id.inputImageView);
         outputImageView = findViewById(R.id.outputImageView);
-        selectImageButton = findViewById(R.id.selectImageButton);
-        runInferenceButton = findViewById(R.id.runInferenceButton);
+        final Button selectImageButton = findViewById(R.id.selectImageButton);
+        final Button runInferenceButton = findViewById(R.id.runInferenceButton);
+
+        resetInferenceTimes();
 
         loadModelList();
-
         modelSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(
@@ -89,22 +91,33 @@ public class MainActivity extends AppCompatActivity {
                 final String fileName = (String) parent.getItemAtPosition(pos);
                 selectedModelFile = new File(modelDirPath, fileName);
                 final long sizeInKB = selectedModelFile.length() / 1024;
-                modelMemoryText.setText("Memory Usage: " + sizeInKB + " KB");
+                setViewText(R.string.memory_usage, modelMemoryView, sizeInKB + "KB");
             }
 
             @Override
-            public void onNothingSelected(final AdapterView<?> parent) {}
+            public void onNothingSelected(final AdapterView<?> parent) {
+                setViewText(R.string.memory_usage, modelMemoryView, "0KB");
+            }
+
         });
 
         selectImageButton.setOnClickListener(v -> selectImage());
 
         runInferenceButton.setOnClickListener(v -> {
             if (inputBitmap == null || selectedModelFile == null) {
-                Toast.makeText(this, "Please select a model and image", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.selections_required),
+                               Toast.LENGTH_SHORT).show();
                 return;
             }
             runSegmentation();
         });
+    }
+
+    private void setViewText(
+            @StringRes final int resId, final TextView textView,
+            final String text
+    ) {
+        textView.setText(getString(resId, text));
     }
 
     private void loadModelList() {
@@ -122,8 +135,10 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        final String noModels = getString(R.string.no_models_found);
+
         if (modelNames.isEmpty()) {
-            modelNames.add("No models found");
+            modelNames.add(noModels);
         }
 
         final ArrayAdapter<String> adapter =
@@ -131,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         modelSpinner.setAdapter(adapter);
 
-        if (!"No models found".equals(modelNames.get(0))) {
+        if (!noModels.equals(modelNames.get(0))) {
             selectedModelFile = new File(modelDirPath, modelNames.get(0));
         }
     }
@@ -144,7 +159,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void runSegmentation() {
         try {
-
             final Module module = Module.load(selectedModelFile.getAbsolutePath());
 
             final int width = 224;
@@ -197,8 +211,10 @@ public class MainActivity extends AppCompatActivity {
                                               inputBitmap.getHeight(), true);
 
             outputImageView.setImageBitmap(finalBitmap);
-            inferenceTimeText.setText(
-                    "Inference Time: " + String.format("%.2f", inferenceTimeMs) + " ms");
+            final String inferenceTime = String.format("%.2f", inferenceTimeMs) + " ms";
+            final String arrayTime = String.format("%.2f", arrayTimeMs) + " ms";
+            setViewText(R.string.inference_time, inferenceTimeView, inferenceTime);
+            setViewText(R.string.postprocessing_time, postprocessingTimeView, arrayTime);
             Log.d("ImageSegmentation", "inference time (ms): " + inferenceTimeMs);
             Log.d("ImageSegmentation", "array time (ms): " + arrayTimeMs);
 
@@ -206,6 +222,11 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "Inference failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void resetInferenceTimes() {
+        setViewText(R.string.inference_time, inferenceTimeView, "-");
+        setViewText(R.string.postprocessing_time, postprocessingTimeView, "-");
     }
 
     private List<Integer> generateDistinctColors(final long count) {

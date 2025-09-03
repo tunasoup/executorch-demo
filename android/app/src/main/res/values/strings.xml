@@ -1,11 +1,19 @@
 <resources>
     <string name="app_name">ExecuTorch Demo</string>
     <string name="select_model">Select Model</string>
-    <string name="memory_usage">Memory Usage: -</string>
+    <string name="no_models_found">No models found</string>
+    <!-- Text for showing a model's memory usage -->
+    <string name="memory_usage">Memory Usage: %1$s</string>
     <string name="select_input_image">Select Input Image</string>
+    <!-- Alt text for input image -->
     <string name="selected_input_image_preview">Selected input image preview</string>
+    <!-- Inference button text -->
     <string name="run_segmentation">Run Segmentation</string>
-    <string name="inference_time">Inference Time: -</string>
+    <string name="inference_time">Inference Time: %1$s</string>
+    <string name="postprocessing_time">Postprocessing Time: %1$s</string>
     <string name="segmented_output">Segmented Output</string>
+    <!-- Alt text for output image -->
     <string name="segmented_output_image">Segmented output image</string>
+    <!-- Toast text when attempting to run without selections -->
+    <string name="selections_required">"Please select a model and image"</string>
 </resources>
