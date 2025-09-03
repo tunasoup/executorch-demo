@@ -4,34 +4,33 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.View;
-import android.widget.*;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import org.pytorch.executorch.EValue;
 import org.pytorch.executorch.Module;
 import org.pytorch.executorch.Tensor;
-import android.util.Log;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -45,25 +44,26 @@ public class MainActivity extends AppCompatActivity {
 
     private File selectedModelFile;
     private Bitmap inputBitmap;
-
+    private final ActivityResultLauncher<Intent> imagePickerLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(), result -> {
+                        if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                            Uri imageUri = result.getData().getData();
+                            try {
+                                inputBitmap = MediaStore.Images.Media.getBitmap(
+                                        this.getContentResolver(), imageUri);
+                                inputImageView.setImageBitmap(inputBitmap);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                Toast.makeText(this, "Failed to load image",
+                                               Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
     private String modelDirPath;
 
-    private final ActivityResultLauncher<Intent> imagePickerLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                    Uri imageUri = result.getData().getData();
-                    try {
-                        inputBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), imageUri);
-                        inputImageView.setImageBitmap(inputBitmap);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         requestPermissionsIfNeeded();
@@ -80,15 +80,20 @@ public class MainActivity extends AppCompatActivity {
 
         modelSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                String fileName = (String) parent.getItemAtPosition(pos);
+            public void onItemSelected(
+                    final AdapterView<?> parent,
+                    final View view,
+                    final int pos,
+                    final long id
+            ) {
+                final String fileName = (String) parent.getItemAtPosition(pos);
                 selectedModelFile = new File(modelDirPath, fileName);
-                long sizeInKB = selectedModelFile.length() / 1024;
+                final long sizeInKB = selectedModelFile.length() / 1024;
                 modelMemoryText.setText("Memory Usage: " + sizeInKB + " KB");
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onNothingSelected(final AdapterView<?> parent) {}
         });
 
         selectImageButton.setOnClickListener(v -> selectImage());
@@ -103,16 +108,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadModelList() {
-        File modelDir = new File(getExternalFilesDir(null), "models");
+        final File modelDir = new File(getExternalFilesDir(null), "models");
         if (!modelDir.exists()) {
             modelDir.mkdirs();
         }
         modelDirPath = modelDir.getPath();
 
-        File[] modelFiles = modelDir.listFiles((dir, name) -> name.endsWith(".pte"));
-        List<String> modelNames = new ArrayList<>();
+        final File[] modelFiles = modelDir.listFiles((dir, name) -> name.endsWith(".pte"));
+        final List<String> modelNames = new ArrayList<>();
         if (modelFiles != null) {
-            for (File file : modelFiles) {
+            for (final File file : modelFiles) {
                 modelNames.add(file.getName());
             }
         }
@@ -121,50 +126,52 @@ public class MainActivity extends AppCompatActivity {
             modelNames.add("No models found");
         }
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, modelNames);
+        final ArrayAdapter<String> adapter =
+                new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, modelNames);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         modelSpinner.setAdapter(adapter);
 
-        if (!modelNames.get(0).equals("No models found")) {
+        if (!"No models found".equals(modelNames.get(0))) {
             selectedModelFile = new File(modelDirPath, modelNames.get(0));
         }
     }
 
     private void selectImage() {
-        Intent pickIntent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        final Intent pickIntent =
+                new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
         imagePickerLauncher.launch(pickIntent);
     }
 
     private void runSegmentation() {
         try {
 
-            Module module = Module.load(selectedModelFile.getAbsolutePath());
+            final Module module = Module.load(selectedModelFile.getAbsolutePath());
 
-            int width = 224;
-            int height = 224;
+            final int width = 224;
+            final int height = 224;
 
-            Bitmap resizedBitmap = Bitmap.createScaledBitmap(inputBitmap, width, height, true);
-            FloatBuffer inputBuffer = Tensor.allocateFloatBuffer(3 * width * height);
+            final Bitmap resizedBitmap =
+                    Bitmap.createScaledBitmap(inputBitmap, width, height, true);
 
-            Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(resizedBitmap,
-                    TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+            final Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
+                    resizedBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
                     TensorImageUtils.TORCHVISION_NORM_STD_RGB);
 
             final long timeOne = System.nanoTime();
-            Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
+            final Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
             final long timeTwo = System.nanoTime();
 
             final long nClasses = outputTensor.shape()[1];
-            List<Integer> colors = generateDistinctColors(nClasses);
+            final List<Integer> colors = generateDistinctColors(nClasses);
             final float[] scores = outputTensor.getDataAsFloatArray();
 
-            int[] intValues = new int[width * height];
+            final int[] intValues = new int[width * height];
             for (int j = 0; j < height; j++) {
                 for (int k = 0; k < width; k++) {
                     int maxi = 0, maxj = 0, maxk = 0;
                     double maxnum = -Double.MAX_VALUE;
                     for (int i = 0; i < nClasses; i++) {
-                        float score = scores[i * (width * height) + j * width + k];
+                        final float score = scores[i * (width * height) + j * width + k];
                         if (score > maxnum) {
                             maxnum = score;
                             maxi = i;
@@ -177,46 +184,49 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             final long timeThree = System.nanoTime();
-            double inferenceTimeMs = (timeTwo - timeOne) / 1_000_000.0;
-            double arrayTimeMs = (timeThree - timeTwo) / 1_000_000.0;
+            final double inferenceTimeMs = (timeTwo - timeOne) / 1_000_000.0;
+            final double arrayTimeMs = (timeThree - timeTwo) / 1_000_000.0;
 
-            Bitmap overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            final Bitmap overlayBitmap =
+                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             overlayBitmap.setPixels(intValues, 0, width, 0, 0, width, height);
 
-            Bitmap outputBitmap = overlayWithAlpha(resizedBitmap, overlayBitmap, 0.5f);
-            Bitmap finalBitmap = Bitmap.createScaledBitmap(outputBitmap, inputBitmap.getWidth(),
-                    inputBitmap.getHeight(), true);
+            final Bitmap outputBitmap = overlayWithAlpha(resizedBitmap, overlayBitmap, 0.5f);
+            final Bitmap finalBitmap =
+                    Bitmap.createScaledBitmap(outputBitmap, inputBitmap.getWidth(),
+                                              inputBitmap.getHeight(), true);
 
             outputImageView.setImageBitmap(finalBitmap);
-            inferenceTimeText.setText("Inference Time: " + String.format("%.2f", inferenceTimeMs) + " ms");
+            inferenceTimeText.setText(
+                    "Inference Time: " + String.format("%.2f", inferenceTimeMs) + " ms");
             Log.d("ImageSegmentation", "inference time (ms): " + inferenceTimeMs);
             Log.d("ImageSegmentation", "array time (ms): " + arrayTimeMs);
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Inference failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
-    private List<Integer> generateDistinctColors(long count) {
-        List<Integer> colors = new ArrayList<>();
+    private List<Integer> generateDistinctColors(final long count) {
+        final List<Integer> colors = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            float hue = (i * 360f / count) % 360f;
-            float[] hsv = new float[]{hue, 0.7f, 1.0f};
+            final float hue = (i * 360f / count) % 360f;
+            final float[] hsv = {hue, 0.7f, 1.0f};
             colors.add(Color.HSVToColor(hsv));
         }
         return colors;
     }
 
-    private Bitmap overlayWithAlpha(Bitmap base, Bitmap overlay, float alpha) {
+    private Bitmap overlayWithAlpha(final Bitmap base, final Bitmap overlay, final float alpha) {
         if (base.getWidth() != overlay.getWidth() || base.getHeight() != overlay.getHeight()) {
             throw new IllegalArgumentException("Bitmaps must be the same size");
         }
 
-        Bitmap result = base.copy(base.getConfig(), true);
-        Canvas canvas = new Canvas(result);
+        final Bitmap result = base.copy(base.getConfig(), true);
+        final Canvas canvas = new Canvas(result);
 
-        Paint paint = new Paint();
+        final Paint paint = new Paint();
         paint.setAlpha((int) (alpha * 255));
         canvas.drawBitmap(overlay, 0, 0, paint);
 
@@ -226,8 +236,8 @@ public class MainActivity extends AppCompatActivity {
     private void requestPermissionsIfNeeded() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
+            ActivityCompat.requestPermissions(
+                    this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
                     REQUEST_PERMISSIONS);
         }
     }
