@@ -2,8 +2,6 @@ from collections.abc import Callable
 from typing import ClassVar, TypeVar
 
 from torch import nn
-from torchvision.models import mobilenet_v2
-from torchvision.models.mobilenetv2 import MobileNet_V2_Weights
 from torchvision.models.segmentation import deeplabv3_resnet101
 
 M = TypeVar("M", bound=nn.Module)
@@ -37,15 +35,6 @@ class ModelRegistry:
     @classmethod
     def list_entries(cls) -> list[str]:
         return sorted(cls._registry)
-
-
-@ModelRegistry.register()
-class MobileNetV2:
-    def __init__(self) -> nn.Module:
-        self.model = mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT).eval()
-
-    def get_model(self) -> nn.Module:
-        return self.model
 
 
 @ModelRegistry.register("dl3_resnet101")

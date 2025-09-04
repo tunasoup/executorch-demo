@@ -14,7 +14,6 @@ dependencies = [
 ]
 
 [project.scripts]
-mobilenet-demo = "executorch_demo.mobilenet_demo:run_mobilenet_demo"
 dl3-export = "executorch_demo.dl3_export:main"
 
 [build-system]
