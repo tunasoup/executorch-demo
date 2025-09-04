@@ -204,6 +204,7 @@ __marimo__/
 
 # Custom
 data/
+models/
 *.pte
 *.txt
 *.jpg
