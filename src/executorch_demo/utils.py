@@ -87,7 +87,9 @@ def get_model_dir() -> Path:
     Returns:
         Path: Path to the model directory
     """
-    return get_root_dir() / "models"
+    model_dir = get_root_dir() / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return model_dir
 
 
 def get_files_with_extensions(

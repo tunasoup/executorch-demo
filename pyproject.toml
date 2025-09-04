@@ -9,6 +9,8 @@ dependencies = [
     "matplotlib>=3.10.5",  # Visualizations
     "pyqt6>=6.9.1",  # Visualization backend
     "torchvision>=0.23.0",  # CV functions and pretrained models
+    "onnxruntime",
+    "onnxscript",
 ]
 
 [project.scripts]
