@@ -1,16 +1,27 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import ClassVar, TypeVar
 
 from torch import nn
 from torchvision.models.segmentation import deeplabv3_resnet101
 
-M = TypeVar("M", bound=nn.Module)
+M = TypeVar("M", bound="BaseModel")
+
+
+class BaseModel(ABC):
+    def get_model(self) -> nn.Module:
+        return self.model
+
+    @property
+    @abstractmethod
+    def model(self) -> nn.Module:
+        pass
 
 
 class ModelRegistry:
     """Decorator-based model registration."""
 
-    _registry: ClassVar[dict[str, nn.Module]] = {}
+    _registry: ClassVar[dict[str, type[M]]] = {}
 
     @classmethod
     def register(cls, name: str | None = None) -> Callable[[type[M]], type[M]]:
@@ -28,7 +39,7 @@ class ModelRegistry:
     def get_entry(cls, name: str) -> nn.Module:
         entry = cls._registry.get(name)
         if entry:
-            return entry()
+            return entry().get_model()
         msg = f"Entry '{name}' is not registered."
         raise ValueError(msg)
 
@@ -38,9 +49,9 @@ class ModelRegistry:
 
 
 @ModelRegistry.register("dl3_resnet101")
-class DeepLabV3ResNet101:
-    def __init__(self) -> nn.Module:
+class DeepLabV3ResNet101(BaseModel):
+    def __init__(self) -> None:
         self.model = deeplabv3_resnet101(weights="DEFAULT").eval()
 
-    def get_model(self) -> nn.Module:
+    def model(self) -> nn.Module:
         return self.model
