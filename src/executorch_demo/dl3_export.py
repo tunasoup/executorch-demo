@@ -3,13 +3,13 @@ from pathlib import Path
 import torch
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.exir import to_edge_transform_and_lower
-from torchvision import models
 
 from executorch_demo.utils import get_model_dir
+from executorch_demo.models import ModelRegistry
 
 
 def get_dl3_model_and_inputs() -> tuple[torch.nn.Module, torch.Tensor]:
-    model = models.segmentation.deeplabv3_resnet101(weights="DEFAULT").eval()
+    model = ModelRegistry.get_entry("dl3_resnet101")
     sample_inputs = (torch.randn(1, 3, 224, 224),)
     return model, sample_inputs
 
