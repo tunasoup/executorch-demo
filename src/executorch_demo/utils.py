@@ -19,6 +19,7 @@ def create_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
         logging.Logger: Configured logger instance.
     """
     logger = logging.getLogger(name)
+    logger.propagate = False
     logger.setLevel(logging.DEBUG)  # Handlers never show lower levels than the logger itself
 
     log_file = get_log_dir() / "app.log"
