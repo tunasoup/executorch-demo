@@ -29,7 +29,10 @@ def plot_images(imgs: torch.Tensor | list[torch.Tensor]) -> None:
     for i, img in enumerate(imgs):
         img_to_plot = img.detach().cpu().permute(1, 2, 0)
         axes[i].imshow(img_to_plot)
-        axes[i].axis("off")
+
+    # Turn off axes for all subplots, even those without an image
+    for ax in axes:
+        ax.axis("off")
 
     plt.tight_layout()
     plt.show()
