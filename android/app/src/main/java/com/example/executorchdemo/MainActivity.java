@@ -161,29 +161,37 @@ public class MainActivity extends AppCompatActivity {
         imagePickerLauncher.launch(pickIntent);
     }
 
+    private SegmentationOutput runTorchModel(final Bitmap resizedBitmap) {
+        final Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
+                resizedBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+                TensorImageUtils.TORCHVISION_NORM_STD_RGB);
+
+        final Module module = Module.load(selectedModelFile.getAbsolutePath());
+        final Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
+
+        final float[] flatOutput = outputTensor.getDataAsFloatArray();
+        final long[] shape = outputTensor.shape(); // [1, C, H, W]
+
+        return new SegmentationOutput(flatOutput, shape);
+    }
+
     /**
      * Run segmentation inference with the set model and image.
      */
     private void runSegmentation() {
         try {
-            final Module module = Module.load(selectedModelFile.getAbsolutePath());
-
-            // Current test model expects a specific image size and preprocessing
+            // Current test models expect a specific image size and preprocessing
             final int width = 224;
             final int height = 224;
 
             final Bitmap resizedBitmap =
                     Bitmap.createScaledBitmap(inputBitmap, width, height, true);
 
-            final Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
-                    resizedBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-                    TensorImageUtils.TORCHVISION_NORM_STD_RGB);
-
             final long timeOne = System.nanoTime();
-            final Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
+            final SegmentationOutput segOutput = runTorchModel(resizedBitmap);
 
             final long timeTwo = System.nanoTime();
-            final Bitmap overlayBitmap = postprocess(outputTensor, resizedBitmap);
+            final Bitmap overlayBitmap = postprocess(segOutput, resizedBitmap);
 
             final Bitmap outputBitmap = overlayWithAlpha(resizedBitmap, overlayBitmap, 0.5f);
             final Bitmap finalBitmap =
@@ -211,20 +219,21 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Convert the model output into a readable segmentation image.
      *
-     * @param outputTensor inference output of shape (images, classes, height, width).
+     * @param segOutput inference output with flattened logits and original shape.
      * @param resizedBitmap input image resized to match the model output.
      * @return inference segmentation map with a distinct color for each found class.
      */
-    private Bitmap postprocess(final Tensor outputTensor, final Bitmap resizedBitmap) {
+//    private Bitmap postprocess(final Tensor outputTensor, final Bitmap resizedBitmap) {
+    private Bitmap postprocess(final SegmentationOutput segOutput, final Bitmap resizedBitmap) {
         // Deduce class number from the output shape
-        final long nClasses = outputTensor.shape()[1];
+        final long nClasses = segOutput.shape[1];
         final List<Integer> colors = generateDistinctColors(nClasses);
 
         final int width = resizedBitmap.getWidth();
         final int height = resizedBitmap.getHeight();
 
         // For each pixel, output the class (color) with the highest class score
-        final float[] scores = outputTensor.getDataAsFloatArray();
+        final float[] scores = segOutput.logits;
         final int[] intValues = new int[width * height];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
