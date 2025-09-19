@@ -1,5 +1,5 @@
 # ExecuTorch Demo
-WIP image segmentation demo utilizing ExecuTorch library.
+WIP image segmentation demo utilizing ExecuTorch and ONNX libraries.
 
 ## Development setup:
 WSL 2 (Ubuntu) for Python package (ExecuTorch requires Linux or MacOS),
@@ -15,6 +15,6 @@ pushed to an android device or emulator. adb requires installing Android SDK Pla
 adb shell mkdir /storage/emulated/0/Android/data/com.example.executorchdemo/files/models/
 ```
 ```shell
-adb push dl3_xnnpack_fp32.pte /storage/emulated/0/Android/data/com.example.executorchdemo/files/models/dl3_xnnpack_fp32.pte
+adb push --sync models /storage/emulated/0/Android/data/com.example.executorchdemo/files/
 ```
 
