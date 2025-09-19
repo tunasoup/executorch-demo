@@ -41,4 +41,5 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
     implementation(libs.executorch.android)
+    implementation(libs.onnxruntime.android)
 }

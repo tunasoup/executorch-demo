@@ -28,8 +28,15 @@ import org.pytorch.executorch.Module;
 import org.pytorch.executorch.Tensor;
 
 import java.io.File;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
+import ai.onnxruntime.OnnxTensor;
+import ai.onnxruntime.OrtEnvironment;
+import ai.onnxruntime.OrtException;
+import ai.onnxruntime.OrtSession;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -82,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
                     final int pos,
                     final long id
             ) {
+                // TODO read onnx external data too
                 final String fileName = (String) parent.getItemAtPosition(pos);
                 selectedModelFile = new File(modelDirPath, fileName);
                 final long sizeInKB = selectedModelFile.length() / 1024;
@@ -131,7 +139,8 @@ public class MainActivity extends AppCompatActivity {
         }
         modelDirPath = modelDir.getPath();
 
-        final File[] modelFiles = modelDir.listFiles((dir, name) -> name.endsWith(".pte"));
+        final File[] modelFiles =
+                modelDir.listFiles((dir, name) -> name.endsWith(".pte") || name.endsWith(".onnx"));
         final List<String> modelNames = new ArrayList<>();
         if (modelFiles != null) {
             for (final File file : modelFiles) {
@@ -161,6 +170,102 @@ public class MainActivity extends AppCompatActivity {
         imagePickerLauncher.launch(pickIntent);
     }
 
+    /**
+     * Run the provided input through an ONNX model.
+     *
+     * @param resizedBitmap Input of the expected size for the model, not otherwise preprocessed.
+     * @return SegmentationOutput with flattened logits and output shape.
+     * @throws OrtException Thrown if an ONNX error occurs.
+     */
+    private SegmentationOutput runOnnxModel(final Bitmap resizedBitmap) throws OrtException {
+        final OrtEnvironment env = OrtEnvironment.getEnvironment();
+        final OrtSession session = env.createSession(selectedModelFile.getAbsolutePath(),
+                                                     new OrtSession.SessionOptions());
+
+        final OnnxTensor inputTensor = bitmapToOnnxTensor(env, resizedBitmap);
+        final String inputName = session.getInputNames().iterator().next();
+        final OrtSession.Result result =
+                session.run(Collections.singletonMap(inputName, inputTensor));
+        final OnnxTensor output = (OnnxTensor) result.get(0);
+        final long[] shape = output.getInfo().getShape();
+        final float[][][][] logits = (float[][][][]) output.getValue();
+        final float[] flatOutput = flatten4D(logits);
+
+        return new SegmentationOutput(flatOutput, shape);
+    }
+
+    /**
+     * Convert a bitmap to a preprocessed ONNX Tensor.
+     *
+     * @param env ONNX runtime environment.
+     * @param bitmap 3-channeled bitmap to convert.
+     * @return Preprocessed ONNX Tensor of shape (1, 3, H, W)
+     * @throws OrtException Thrown if there is an ONNX error during tensor creation
+     */
+    private OnnxTensor bitmapToOnnxTensor(final OrtEnvironment env, final Bitmap bitmap)
+            throws OrtException {
+        final int height = bitmap.getHeight();
+        final int width = bitmap.getWidth();
+        final float[] inMean = TensorImageUtils.TORCHVISION_NORM_MEAN_RGB;
+        final float[] inStd = TensorImageUtils.TORCHVISION_NORM_STD_RGB;
+
+        final int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+
+        final FloatBuffer buffer = FloatBuffer.allocate(3 * height * width);
+
+        for (int c = 0; c < 3; c++) {
+            for (final int pixel : pixels) {
+                final int r = (pixel >> 16) & 0xFF;
+                final int g = (pixel >> 8) & 0xFF;
+                final int b = pixel & 0xFF;
+
+                final float val;
+                if (c == 0) val = (r / 255.0f - inMean[0]) / inStd[0];
+                else if (c == 1) val = (g / 255.0f - inMean[1]) / inStd[1];
+                else val = (b / 255.0f - inMean[2]) / inStd[2];
+
+                buffer.put(val);
+            }
+        }
+
+        buffer.rewind();
+        final long[] shape = {1, 3, height, width};
+        return OnnxTensor.createTensor(env, buffer, shape);
+    }
+
+    /**
+     * Flatten a 4-dimensional float array to a single dimension.
+     *
+     * @param inputArray 4-dimensional float array to flatten.
+     * @return float array.
+     */
+    private float[] flatten4D(final float[][][][] inputArray) {
+        final int N = inputArray.length;
+        final int C = inputArray[0].length;
+        final int H = inputArray[0][0].length;
+        final int W = inputArray[0][0][0].length;
+
+        final float[] flatArray = new float[N * C * H * W];
+        int idx = 0;
+
+        for (final float[][][] blockN : inputArray)
+            for (final float[][] blockC : blockN)
+                for (final float[] blockH : blockC)
+                    for (final float val : blockH) {
+                        flatArray[idx] = val;
+                        idx++;
+                    }
+
+        return flatArray;
+    }
+
+    /**
+     * Run the provided input through an ExecuTorch model.
+     *
+     * @param resizedBitmap Input of the expected size for the model, not otherwise preprocessed.
+     * @return SegmentationOutput with flattened logits and output shape.
+     */
     private SegmentationOutput runTorchModel(final Bitmap resizedBitmap) {
         final Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
                 resizedBitmap, TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
@@ -170,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
         final Tensor outputTensor = module.forward(EValue.from(inputTensor))[0].toTensor();
 
         final float[] flatOutput = outputTensor.getDataAsFloatArray();
-        final long[] shape = outputTensor.shape(); // [1, C, H, W]
+        final long[] shape = outputTensor.shape();
 
         return new SegmentationOutput(flatOutput, shape);
     }
@@ -188,7 +293,12 @@ public class MainActivity extends AppCompatActivity {
                     Bitmap.createScaledBitmap(inputBitmap, width, height, true);
 
             final long timeOne = System.nanoTime();
-            final SegmentationOutput segOutput = runTorchModel(resizedBitmap);
+            final SegmentationOutput segOutput;
+            if (selectedModelFile.getAbsolutePath().endsWith(".pte")) {
+                segOutput = runTorchModel(resizedBitmap);
+            } else {
+                segOutput = runOnnxModel(resizedBitmap);
+            }
 
             final long timeTwo = System.nanoTime();
             final Bitmap overlayBitmap = postprocess(segOutput, resizedBitmap);
@@ -223,7 +333,6 @@ public class MainActivity extends AppCompatActivity {
      * @param resizedBitmap input image resized to match the model output.
      * @return inference segmentation map with a distinct color for each found class.
      */
-//    private Bitmap postprocess(final Tensor outputTensor, final Bitmap resizedBitmap) {
     private Bitmap postprocess(final SegmentationOutput segOutput, final Bitmap resizedBitmap) {
         // Deduce class number from the output shape
         final long nClasses = segOutput.shape[1];
