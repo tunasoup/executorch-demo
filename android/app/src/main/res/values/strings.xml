@@ -2,6 +2,8 @@
     <string name="app_name">ExecuTorch Demo</string>
     <string name="select_model">Select Model</string>
     <string name="no_models_found">No models found</string>
+    <!-- Alt text for model list refresh icon button -->
+    <string name="model_refresh">Refresh model list</string>
     <!-- Text for showing a model's memory usage -->
     <string name="memory_usage">Memory Usage: %1$s</string>
     <string name="select_input_image">Select Input Image</string>
@@ -16,4 +18,6 @@
     <string name="segmented_output_image">Segmented output image</string>
     <!-- Toast text when attempting to run without selections -->
     <string name="selections_required">"Please select a model and image"</string>
+    <!-- Checkbox text for enabling GPU usage when applicable -->
+    <string name="enable_gpu">GPU</string>
 </resources>

@@ -13,6 +13,8 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -62,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     });
+    private CheckBox gpuBox;
     private String modelDirPath;
 
     @Override
@@ -75,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
         postprocessingTimeView = findViewById(R.id.postprocessingTimeText);
         inputImageView = findViewById(R.id.inputImageView);
         outputImageView = findViewById(R.id.outputImageView);
+        gpuBox = findViewById(R.id.checkboxEnableGPU);
+        final ImageButton modelRefresher = findViewById(R.id.refreshButton);
         final Button selectImageButton = findViewById(R.id.selectImageButton);
         final Button runInferenceButton = findViewById(R.id.runInferenceButton);
 
@@ -103,6 +108,7 @@ public class MainActivity extends AppCompatActivity {
 
         });
 
+        modelRefresher.setOnClickListener(v -> loadModelList());
         selectImageButton.setOnClickListener(v -> selectImage());
 
         runInferenceButton.setOnClickListener(v -> {
@@ -179,8 +185,10 @@ public class MainActivity extends AppCompatActivity {
      */
     private SegmentationOutput runOnnxModel(final Bitmap resizedBitmap) throws OrtException {
         final OrtEnvironment env = OrtEnvironment.getEnvironment();
+        final OrtSession.SessionOptions sessionOptions = new OrtSession.SessionOptions();
+        if (gpuBox.isChecked()) sessionOptions.addNnapi();
         final OrtSession session = env.createSession(selectedModelFile.getAbsolutePath(),
-                                                     new OrtSession.SessionOptions());
+                                                     sessionOptions);
 
         final OnnxTensor inputTensor = bitmapToOnnxTensor(env, resizedBitmap);
         final String inputName = session.getInputNames().iterator().next();
