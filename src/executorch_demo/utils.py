@@ -82,6 +82,15 @@ def get_data_raw_dir() -> Path:
     return get_data_dir() / "raw"
 
 
+def get_data_preprocessed_dir() -> Path:
+    """Get the directory with preprocessed data.
+
+    Returns:
+        Path: Path to the preprocessed data directory.
+    """
+    return get_data_dir() / "preprocessed"
+
+
 def get_model_dir() -> Path:
     """Get the model directory.
 

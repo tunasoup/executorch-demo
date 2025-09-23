@@ -11,6 +11,9 @@ dependencies = [
     "torchvision>=0.23.0",  # CV functions and pretrained models
     "onnxruntime",
     "onnxscript",
+    "datasets[vision]",
+    "lightning",  # High-end PyTorch interface
+    "tqdm",
 ]
 
 [project.scripts]
