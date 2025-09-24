@@ -1,21 +1,71 @@
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Callable
-from typing import ClassVar, TypeVar
+from typing import Any, ClassVar, Self, TypeVar
 
+import torch
 from torch import nn
-from torchvision.models.segmentation import deeplabv3_resnet101
+from torchvision.models.segmentation import (
+    DeepLabV3_ResNet50_Weights,
+    DeepLabV3_ResNet101_Weights,
+    deeplabv3_resnet50,
+    deeplabv3_resnet101,
+)
 
 M = TypeVar("M", bound="BaseModel")
+CHAINABLE_METHODS = {"eval", "train", "to", "cpu", "cuda", "half", "float"}
 
 
 class BaseModel(ABC):
-    def get_model(self) -> nn.Module:
-        return self.model
+    """An Abstract wrapper class for nn.Modules (and their subclasses).
+
+    Attributes:
+        model (type(nn.Module)): Model with a callable forward function.
+    """
+
+    def __call__(self, *args: torch.Tensor, **kwargs) -> torch.Tensor | OrderedDict:
+        return self.model(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attributes and methods to the model, overwriting a class return
+        for methods, so that methods can be chained.
+
+        Args:
+            name (str): Attribute or method name.
+
+        Returns:
+            Any: Class instance in case of a chainable method, otherwise the original return value.
+        """
+        attr = getattr(self.model, name)
+        # Wrap chainable methods so they are called when followed with parentheses
+        if name in CHAINABLE_METHODS and callable(attr):
+
+            def wrapper(*args: Any, **kwargs) -> Self:
+                attr(*args, **kwargs)
+                return self
+
+            return wrapper
+        # Otherwise return the attribute
+        return attr
 
     @property
     @abstractmethod
-    def model(self) -> nn.Module:
-        pass
+    def model(self) -> type[nn.Module]:
+        """
+        Returns:
+            type[nn.Module]: Model that is expected to behave like nn.Module
+        """
+
+    @abstractmethod
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        """Preprocess an image to match an expected input of the model.
+
+        Args:
+            x (torch.Tensor): Image(s) to preprocess.
+
+        Returns:
+            torch.Tensor: Image tensor in a valid model input form.
+        """
 
 
 class ModelRegistry:
@@ -36,22 +86,59 @@ class ModelRegistry:
         return decorator
 
     @classmethod
-    def get_entry(cls, name: str) -> nn.Module:
+    def get_entry(cls, name: str) -> type[BaseModel]:
+        """Get and initialize a registered entry matching the provided name.
+
+        Args:
+            name (str): Name of an entry.
+
+        Raises:
+            ValueError: If the provided name does not match a registered entry.
+
+        Returns:
+            type[BaseModel]: Initialized entry matching the name.
+        """
         entry = cls._registry.get(name)
         if entry:
-            return entry().get_model()
+            return entry()
         msg = f"Entry '{name}' is not registered."
         raise ValueError(msg)
 
     @classmethod
     def list_entries(cls) -> list[str]:
+        """
+        Returns:
+            list[str]: List of all the registered entries.
+        """
         return sorted(cls._registry)
 
 
 @ModelRegistry.register("dl3_resnet101")
 class DeepLabV3ResNet101(BaseModel):
     def __init__(self) -> None:
-        self.model = deeplabv3_resnet101(weights="DEFAULT").eval()
+        weights = DeepLabV3_ResNet101_Weights.DEFAULT
+        # TODO similar weights metadata feature as in torchvision
+        self._preprocess = weights.transforms()
+        self._model = deeplabv3_resnet101(weights=weights)
 
-    def model(self) -> nn.Module:
-        return self.model
+    @property
+    def model(self) -> type[nn.Module]:
+        return self._model
+
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        return self._preprocess(x)
+
+
+@ModelRegistry.register("dl3_resnet50")
+class DeepLabV3ResNet50(BaseModel):
+    def __init__(self) -> None:
+        weights = DeepLabV3_ResNet50_Weights.DEFAULT
+        self._preprocess = weights.transforms()
+        self._model = deeplabv3_resnet50(weights=weights)
+
+    @property
+    def model(self) -> type[nn.Module]:
+        return self._model
+
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        return self._preprocess(x)

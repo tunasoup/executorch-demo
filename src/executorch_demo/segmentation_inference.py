@@ -3,9 +3,9 @@ import math
 import matplotlib.pyplot as plt
 import torch
 from torchvision.io import decode_image
-from torchvision.models.segmentation import FCN_ResNet50_Weights, fcn_resnet50
 from torchvision.utils import draw_segmentation_masks
 
+from executorch_demo.models import ModelRegistry
 from executorch_demo.utils import create_logger, get_data_raw_dir, get_files_with_extensions
 
 logger = create_logger(__name__)
@@ -60,22 +60,21 @@ def run_inference() -> None:
     logger.info("Starting inference on device %s", device)
 
     data_path = get_data_raw_dir() / "misc"
-    input_img_paths = get_files_with_extensions(data_path, {"jpg", "jpeg"}, recursive=False)
+    input_img_paths = get_files_with_extensions(data_path, {"jpg", "jpeg"}, recursive=True)
     input_imgs = [decode_image(d) for d in input_img_paths]
+    # Keep only 1:1 aspect ratio
+    input_imgs = [img for img in input_imgs if img.shape[1] == img.shape[2]]
     logger.info("Loaded %d images for inference", len(input_imgs))
     # plot_images(input_imgs)
 
-    weights = FCN_ResNet50_Weights.DEFAULT
-    preprocess = weights.transforms()
-    classes = weights.meta["categories"]
-    n_classes = len(classes)
+    model_name = "dl3_resnet50"
+    model = ModelRegistry.get_entry(model_name).eval().to(device)
+    logger.info("Loaded model %s ", model_name)
 
-    model = fcn_resnet50(weights=weights, progress=False)
-    model = model.eval().to(device)
-    logger.info("Model loaded with %d classes", n_classes)
-
-    batch = torch.stack([preprocess(d).to(device) for d in input_imgs])
+    batch = torch.stack([model.preprocess(d).to(device) for d in input_imgs])
     output = model(batch)["out"]  # (n_imgs, n_classes, h, w)
+    logger.info("Output shape: %s", output.shape)
+    n_classes = output.shape[1]
 
     # Given the output, get the predicted class for each pixel (n_imgs, h, w)
     predictions = output.argmax(1)
