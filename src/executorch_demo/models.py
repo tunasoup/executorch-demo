@@ -69,7 +69,7 @@ class BaseModel(ABC):
 
 
 class ModelRegistry:
-    """Decorator-based model registration."""
+    """Decorator-based model registration, case insensitive."""
 
     _registry: ClassVar[dict[str, type[M]]] = {}
 
@@ -78,7 +78,7 @@ class ModelRegistry:
         def decorator(model_class: type[M]) -> type[M]:
             key = name.lower() if name is not None else model_class.__name__.lower()
             if key in cls._registry:
-                msg = f"Entry '{key}' is already registered"
+                msg = f"Entry '{key}' is already registered."
                 raise ValueError(msg)
             cls._registry[key] = model_class
             return model_class
@@ -90,7 +90,7 @@ class ModelRegistry:
         """Get and initialize a registered entry matching the provided name.
 
         Args:
-            name (str): Name of an entry.
+            name (str): Name of an entry (case-insensitive).
 
         Raises:
             ValueError: If the provided name does not match a registered entry.
@@ -98,7 +98,7 @@ class ModelRegistry:
         Returns:
             type[BaseModel]: Initialized entry matching the name.
         """
-        entry = cls._registry.get(name)
+        entry = cls._registry.get(name.lower())
         if entry:
             return entry()
         msg = f"Entry '{name}' is not registered."
@@ -108,9 +108,26 @@ class ModelRegistry:
     def list_entries(cls) -> list[str]:
         """
         Returns:
-            list[str]: List of all the registered entries.
+            list[str]: List of all the registered entries in alphabetical order.
         """
         return sorted(cls._registry)
+
+    @classmethod
+    def clear(cls) -> None:
+        """Clear the registry. Intended for testing purposes."""
+        cls._registry.clear()
+
+    @classmethod
+    def is_registered(cls, name: str) -> bool:
+        """Check if an entry matching the name exists.
+
+        Args:
+            name (str): Name to look up (case-insensitive).
+
+        Returns:
+            bool: Whether an entry matching the name exists.
+        """
+        return name.lower() in cls._registry
 
 
 @ModelRegistry.register("dl3_resnet101")
