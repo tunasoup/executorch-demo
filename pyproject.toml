@@ -16,6 +16,12 @@ dependencies = [
     "tqdm",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=7.0.0",
+]
+
 [project.scripts]
 dl3-export = "executorch_demo.dl3_export:main"
 
